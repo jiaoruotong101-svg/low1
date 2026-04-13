@@ -1,0 +1,2051 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>协作钓鱼挑战</title>
+<script src="/jspsych/static/credamo-jspsych.min.js"></script>
+
+<style>
+  /* 这个是玩家水平连续变量-捕获均值 */
+  /* 移除外部 Google Fonts 引用，使用系统默认中英文字体以保证网络稳定性 */
+  :root {
+    --orange: #FF8C00;
+    --orange-light: #FFB347;
+    --orange-pale: #FFF3E0;
+    --orange-dim: rgba(255,140,0,0.12);
+    --white: #FFFFFF;
+    --gray-100: #F8F8F6;
+    --gray-200: #EFEFED;
+    --gray-400: #B0ADA8;
+    --gray-600: #6B6860;
+    --gray-800: #2C2B29;
+    --green: #34C759;
+    --green-light: rgba(52,199,89,0.2);
+    --red: #FF3B30;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--gray-100);
+    font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    color: var(--gray-800);
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  #app {
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  /* ── SCREENS ── */
+  .screen {
+    display: none;
+    width: 100%; height: 100%;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 28px 24px;
+    animation: fadeIn 0.4s ease;
+    position: relative;
+  }
+  .screen.active { display: flex; }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+  }
+
+  /* ── TYPOGRAPHY ── */
+  .title-emoji { font-size: 48px; margin-bottom: 12px; display:block; text-align:center; }
+  h1 { font-size: 22px; font-weight: 700; color: var(--gray-800); text-align: center; line-height: 1.3; }
+  h2 { font-size: 18px; font-weight: 700; color: var(--gray-800); }
+  p  { font-size: 16px; color: var(--gray-800); line-height: 1.7; }
+  .mono { font-family: Consolas, Monaco, monospace; }
+
+  /* ── BUTTON ── */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: var(--orange);
+    color: var(--white);
+    border: none; border-radius: var(--radius-sm);
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    margin-top: 20px;
+    letter-spacing: 0.04em;
+  }
+  .btn:active { background: #e07c00; transform: scale(0.98); }
+  .btn:disabled { background: var(--gray-400); cursor: not-allowed; transform: none; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--orange);
+    border: 2px solid var(--orange);
+  }
+  .btn-ghost:active { background: var(--orange-dim); transform: scale(0.98); }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .badge-orange { background: var(--orange-dim); color: var(--orange); }
+  .badge-green  { background: rgba(52,199,89,0.12); color: #1e9e3e; }
+  .badge-gold   { background: rgba(255,195,0,0.15); color: #c89000; }
+
+  /* ── DIVIDER ── */
+  .divider { width:40px; height:3px; background:var(--orange); border-radius:2px; margin:16px auto; }
+
+  /* ── PROGRESS BAR ── */
+  .progress-track {
+    width:100%; height:8px;
+    background:var(--gray-200);
+    border-radius:4px; overflow:hidden;
+    margin-top:8px;
+  }
+  .progress-fill {
+    height:100%; border-radius:4px;
+    background: linear-gradient(90deg, var(--orange-light), var(--orange));
+    transition: width 0.1s linear;
+  }
+
+  /* ── GAME SCREEN ── */
+  #screen-game, #screen-solo {
+    padding: 0;
+    background: var(--gray-100);
+    justify-content: flex-start;
+  }
+
+  .game-header {
+    width:100%; max-width:440px;
+    padding:40px 20px 8px;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0;
+  }
+
+  .timer-display {
+    font-family: Consolas, Monaco, monospace;
+    font-size:32px; font-weight:500;
+    color:var(--orange);
+    letter-spacing:-0.02em;
+  }
+  .timer-label {
+    font-size:12px; color:var(--gray-400);
+    font-weight:500; text-transform:uppercase;
+    letter-spacing:0.08em; margin-top:2px;
+  }
+
+  .score-box { text-align:right; }
+  .score-val {
+    font-family: Consolas, Monaco, monospace;
+    font-size:24px; font-weight:500; color:var(--gray-800);
+  }
+  .score-label { font-size:12px; color:var(--gray-400); font-weight:500; letter-spacing:0.06em; }
+
+  /* ── TENSION GAUGE ── */
+  .gauge-area {
+    flex:1; width:100%; max-width:440px;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:0 20px;
+    gap:20px;
+    position:relative;
+  }
+
+  .gauge-container {
+    width:100%;
+    position:relative;
+    user-select:none;
+  }
+
+  .gauge-label-row {
+    display:flex; justify-content:space-between;
+    font-size:12px; color:var(--gray-400);
+    font-weight:500; letter-spacing:0.06em;
+    margin-bottom:8px;
+  }
+
+  .gauge-track {
+    width:100%; height:60px;
+    background:var(--white);
+    border-radius:12px;
+    position:relative;
+    overflow:hidden;
+    box-shadow:0 2px 12px rgba(0,0,0,0.06);
+  }
+
+  .gauge-green {
+    position:absolute;
+    top:0; height:100%;
+    background: linear-gradient(180deg, #34C759, #2DB34A);
+    border-radius:8px;
+    transition: left 0.05s, width 0.05s;
+    opacity:0.85;
+  }
+
+  .gauge-needle {
+    position:absolute;
+    top:50%; transform:translate(-50%,-50%);
+    width:4px; height:52px;
+    background:var(--orange);
+    border-radius:2px;
+    box-shadow:0 0 12px rgba(255,140,0,0.5);
+    transition: left 0.06s;
+  }
+  .gauge-needle::before {
+    content:'';
+    position:absolute; top:-4px; left:50%;
+    transform:translateX(-50%);
+    width:12px; height:12px;
+    background:var(--orange);
+    border-radius:50%;
+    box-shadow:0 0 8px rgba(255,140,0,0.6);
+  }
+
+  /* ── CAPTURE BAR ── */
+  .capture-section { width:100%; }
+  .capture-label-row {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:8px;
+  }
+  .capture-title { font-size:13px; font-weight:600; color:var(--gray-600); }
+  .capture-pct {
+    font-family: Consolas, Monaco, monospace;
+    font-size:13px; font-weight:500; color:var(--orange);
+  }
+  .capture-track {
+    width:100%; height:15px;
+    background:var(--white);
+    border-radius:7px; overflow:hidden;
+    box-shadow:0 2px 8px rgba(0,0,0,0.05);
+  }
+  .capture-fill {
+    height:100%; border-radius:7px;
+    background: linear-gradient(90deg, #FFB347, #FF8C00);
+    transition: width 0.1s linear;
+  }
+
+  /* ── STATUS PILL ── */
+  .status-pill {
+    padding:6px 15px;
+    border-radius:20px;
+    font-size:12px; font-weight:700;
+    letter-spacing:0.04em;
+    background:var(--white);
+    color:var(--gray-600);
+    box-shadow:0 2px 8px rgba(0,0,0,0.06);
+    transition: background 0.2s, color 0.2s;
+  }
+  .status-pill.in-zone { background:var(--green-light); color:#1e9e3e; }
+  .status-pill.out-zone { background:rgba(255,59,48,0.1); color:var(--red); }
+
+  /* ── HOLD BUTTON ── */
+  .hold-area {
+    width:100%; max-width:440px;
+    padding:0 20px 24px;
+    flex-shrink:0;
+  }
+  .hold-btn {
+    width:100%; height:80px;
+    background:var(--white);
+    border:3px solid var(--gray-200);
+    border-radius:var(--radius);
+    font-family:'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size:18px; font-weight:700;
+    color:var(--gray-400);
+    cursor:pointer;
+    transition:all 0.12s;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    box-shadow:0 2px 12px rgba(0,0,0,0.06);
+    -webkit-user-select:none; user-select:none;
+  }
+  .hold-btn.pressed {
+    background:var(--orange);
+    border-color:var(--orange);
+    color:var(--white);
+    box-shadow:0 4px 20px rgba(255,140,0,0.35);
+    transform:scale(0.98);
+  }
+  .hold-btn .btn-hint { font-size:12px; font-weight:400; opacity:0.7; }
+
+  /* ── PARTNER CARD (DISCLOSURE) ── */
+  .partner-card {
+    background:var(--white); border-radius:var(--radius);
+    padding:28px 24px;
+    width:100%; max-width:400px;
+    box-shadow:0 4px 28px rgba(0,0,0,0.1);
+  }
+  .partner-header {
+    display:flex; align-items:center; gap:16px;
+    margin-bottom:20px;
+  }
+  .partner-avatar {
+    width:56px; height:56px;
+    background:var(--orange-dim);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:28px;
+    flex-shrink:0;
+  }
+  .partner-info h3 { font-size:18px; font-weight:700; margin-bottom:4px; }
+  .partner-info p  { font-size:13px; color:var(--gray-400); }
+
+  .stat-grid {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:12px; margin-bottom:16px;
+  }
+  .stat-item {
+    background:var(--gray-100); border-radius:var(--radius-sm);
+    padding:12px 14px;
+  }
+  .stat-item .s-val {
+    font-family: Consolas, Monaco, monospace;
+    font-size:20px; font-weight:500;
+    color:var(--orange);
+  }
+  .stat-item .s-lbl {
+    font-size:12px; color:var(--gray-400);
+    font-weight:500; margin-top:2px;
+    letter-spacing:0.04em;
+  }
+  /* 段位卡片容器 */
+.rank-row {
+  display: flex;
+  align-items: center;
+  padding: 18px 24px; /* 略微增加内边距 */
+  background: linear-gradient(135deg, #FFF9F2 0%, #FFFFFF 100%);
+  border: 1.5px solid rgba(255, 140, 0, 0.15);
+  border-radius: 16px;
+  box-shadow: 0 4px 15px rgba(255, 140, 0, 0.08);
+  margin-bottom: 24px;
+}
+
+/* “段位等级”上方小标题 */
+.rank-label-top {
+  font-size: 14px; /* 增大字号 */
+  color: var(--gray-400);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
+}
+
+/* 主内容布局 */
+.rank-main-content {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+/* 段位图标 */
+.rank-icon {
+  font-size: 30px; /* 增大图标 */
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
+}
+
+/* 段位数字 (如: 4) */
+.rank-text {
+  font-size: 36px; /* 显著增大字号 */
+  font-weight: 900;
+  color: var(--orange);
+  line-height: 1;
+}
+
+/* “级”字 */
+.rank-unit {
+  font-size: 18px; /* 增大字号 */
+  font-weight: 800;
+  color: var(--orange);
+}
+
+/* “专业玩家” 徽章标签 */
+.rank-sub {
+  font-size: 20px; /* 增大字号 */
+  font-weight: 800;
+  color: #fff;
+  background: var(--orange);
+  padding: 6px 16px; /* 增加衬垫 */
+  border-radius: 10px;
+  margin-left: auto;
+  box-shadow: 0 3px 8px rgba(255, 140, 0, 0.25);
+  letter-spacing: 0.05em;
+}
+
+/* 针对“未指定”状态的特殊样式 */
+.rank-pending {
+  color: var(--gray-400);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+  /* ── IN-GAME FLOAT (Group 2) ── */
+  .float-banner {
+    position:fixed; top:76px; left:50%; transform:translateX(-50%);
+    width:calc(100% - 120px); max-width:320px;
+    background:rgba(255,255,255,0.95);
+    backdrop-filter:blur(12px);
+    border-radius:var(--radius);
+    border:1.5px solid var(--orange-light);
+    padding:8px 12px;
+    box-shadow:0 4px 20px rgba(255,140,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+    display:none; z-index:100;
+    animation:slideDown 0.4s ease;
+  }
+  .float-banner.show { display:block; }
+  @keyframes slideDown { from{transform:translateX(-50%) translateY(-20px);opacity:0;} to{transform:translateX(-50%) translateY(0);opacity:1;} }
+
+  .float-inner { display:flex; align-items:center; gap:10px; }
+  .float-avatar { display:none;font-size:30px; margin-top:2px; flex-shrink:0; }
+  .float-text { flex:1; min-width:0; }
+  .float-header-row { display:flex; align-items:center; gap:7px; margin-bottom:4px; flex-wrap:wrap; }
+  .float-algo-tag {
+    background:var(--orange); color:#fff;
+    font-size:10px; font-weight:700;
+    padding:2px 8px; border-radius:4px; letter-spacing:0.07em;
+    flex-shrink:0;
+  }
+  .float-rank-badge { font-size:14px; font-weight:700; color:var(--orange); }
+  .float-text h4 { font-size:15px; font-weight:700; color:var(--gray-800); line-height:1.4; margin-bottom:5px; }
+  .float-stats {
+    display:flex; gap:12px; flex-wrap:nowrap;
+    padding:5px 8px;
+    background:var(--orange-pale);
+    border-radius:6px;
+  }
+  .float-stats span { font-size:12px; color:var(--gray-600); white-space:nowrap; }
+  .float-stats strong { color:var(--orange); font-size:13px; font-weight:700; }
+  .float-close {
+    margin-left:auto;
+    background:none; border:none;
+    color:var(--gray-400); font-size:18px;
+    cursor:pointer; padding:4px; flex-shrink:0;
+  }
+
+  /* ── MATCHING SCREEN ── */
+  .dot-pulse {
+    display:flex; gap:8px; justify-content:center; margin:24px 0;
+  }
+  .dot-pulse span {
+    width:10px; height:10px;
+    background:var(--orange);
+    border-radius:50%;
+    animation:pulse 1s ease-in-out infinite;
+  }
+  .dot-pulse span:nth-child(2) { animation-delay:0.2s; }
+  .dot-pulse span:nth-child(3) { animation-delay:0.4s; }
+  @keyframes pulse {
+    0%,100%{transform:scale(0.7);opacity:0.4;}
+    50%{transform:scale(1);opacity:1;}
+  }
+
+  /* ── RESULT SCREEN ── */
+  .result-ring {
+    width:100px; height:100px;
+    border-radius:50%;
+    background:var(--orange-dim);
+    display:flex; align-items:center; justify-content:center;
+    font-size:52px;
+    margin:0 auto 20px;
+  }
+  .result-score {
+    font-family: Consolas, Monaco, monospace;
+    font-size:48px; font-weight:500;
+    color:var(--orange); text-align:center;
+    line-height:1;
+  }
+  .result-score-label { font-size:13px; color:var(--gray-400); text-align:center; margin-top:4px; }
+
+  .data-table { width:100%; margin-top:16px; }
+  .data-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0;
+    border-bottom:1px solid var(--gray-200);
+    font-size:14px;
+  }
+  .data-row:last-child { border-bottom:none; }
+  .data-row .d-key { color:var(--gray-600); }
+  .data-row .d-val { font-family: Consolas, Monaco, monospace; font-weight:500; color:var(--gray-800); }
+
+  /* ── PARTNER SECTION (upgraded) ── */
+  .partner-section {
+    width:100%;
+    background:var(--white);
+    border-radius:var(--radius-sm);
+    padding:10px 14px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.06);
+  }
+  .partner-bar-header {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:8px;
+  }
+  .partner-bar-label {
+    font-size:13px; font-weight:700; color:var(--gray-600);
+    letter-spacing:0.04em;
+  }
+  .partner-bar-status {
+    font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:12px;
+    background:var(--green-light); color:#1e9e3e;
+    transition:background 0.3s, color 0.3s;
+  }
+  .partner-bar-status.drift {
+    background:rgba(255,59,48,0.1); color:var(--red);
+  }
+  .partner-bar-track {
+    width:100%; height:20px;
+    background:var(--gray-100);
+    border-radius:10px;
+    position:relative; overflow:visible;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .partner-bar-safe-zone {
+    position:absolute;
+    top:0; height:100%;
+    background:rgba(52,199,89,0.18);
+    border-radius:10px;
+    left:35%; width:30%;
+  }
+  .partner-bar-fill {
+    position:absolute;
+    top:2px; height:calc(100% - 4px);
+    border-radius:8px;
+    background:linear-gradient(90deg,#4facfe,#00f2fe);
+    transition:width 0.08s;
+    left:0;
+  }
+  .partner-bar-needle {
+    position:absolute;
+    top:50%; transform:translate(-50%,-50%);
+    width:3px; height:26px;
+    background:#4facfe;
+    border-radius:2px;
+    box-shadow:0 0 8px rgba(79,172,254,0.7);
+    transition:left 0.08s;
+  }
+  .partner-bar-needle::before {
+    content:'';
+    position:absolute; top:-3px; left:50%;
+    transform:translateX(-50%);
+    width:9px; height:9px;
+    background:#4facfe; border-radius:50%;
+    box-shadow:0 0 6px rgba(79,172,254,0.8);
+  }
+
+  /* ── EVENT TOAST (minimal text, no box) ── */
+  .event-toast {
+    position:absolute;
+    left:50%; transform:translateX(-50%) translateY(4px);
+    white-space:nowrap;
+    z-index:300;
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.25s, transform 0.25s;
+  }
+  .event-toast.show {
+    opacity:1; transform:translateX(-50%) translateY(0);
+  }
+  .event-toast .et-line {
+    font-size:13px; font-weight:800;
+    letter-spacing:0.03em;
+    text-shadow:0 1px 4px rgba(255,255,255,0.9);
+  }
+  .event-toast.boost .et-line { color:#1e9e3e; }
+  .event-toast.drift  .et-line { color:var(--orange); }
+  .event-toast.sync  .et-line  { color:#7c3aed; }
+
+  /* ── CONTRIBUTION BARS (result) ── */
+  .contrib-section { width:100%; margin-top:16px; }
+  .contrib-title { font-size:13px; font-weight:700; color:var(--gray-600); margin-bottom:10px; }
+  .contrib-row {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:8px;
+  }
+  .contrib-label { font-size:12px; color:var(--gray-600); width:52px; flex-shrink:0; }
+  .contrib-track {
+    flex:1; height:14px;
+    background:var(--gray-200);
+    border-radius:7px; overflow:hidden;
+  }
+  .contrib-fill {
+    height:100%; border-radius:7px;
+    transition:width 0.6s ease;
+  }
+  .contrib-fill.you { background:linear-gradient(90deg,#FFB347,#FF8C00); }
+  .contrib-fill.partner { background:linear-gradient(90deg,#4facfe,#00f2fe); }
+  .contrib-pct {
+    font-family:Consolas,Monaco,monospace;
+    font-size:13px; font-weight:600;
+    width:36px; text-align:right; flex-shrink:0;
+  }
+  .contrib-pct.you { color:var(--orange); }
+  .contrib-pct.partner { color:#4facfe; }
+
+  /* ── DEBUG OVERLAY ── */
+  /*-.debug-bar {
+    position:fixed; bottom:0; left:0; right:0;
+    background:rgba(44,43,41,0.9);
+    color:#fff; font-size:12px;
+    padding:8px 16px;
+    font-family: Consolas, Monaco, monospace;
+    z-index:9999;
+    display:none;
+  }-*/
+
+  /* ── MISC ── */
+  .text-center { text-align:center; }
+  .mt-8  { margin-top:8px; }
+  .mt-16 { margin-top:16px; }
+  .mt-20 { margin-top:20px; }
+  .w-max { max-width:360px; }
+
+  /* ── 【新增】队友水平徽章 ── */
+  .skill-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 14px; border-radius:20px;
+    font-size:13px; font-weight:800;
+    letter-spacing:0.06em;
+  }
+  .skill-badge.high { background:rgba(52,199,89,0.15); color:#1e9e3e; border:1.5px solid rgba(52,199,89,0.3); }
+  .skill-badge.low  { background:rgba(255,59,48,0.1);  color:var(--red); border:1.5px solid rgba(255,59,48,0.25); }
+
+  /* ── 【新增】算法解释框 ── */
+  .algo-explain-box {
+    background: linear-gradient(135deg, #fff9f2, #fff3e0);
+    border: 1.5px solid rgba(255,140,0,0.25);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+  .algo-explain-box .ae-tag {
+    display:inline-block;
+    background:var(--orange); color:#fff;
+    font-size:10px; font-weight:700;
+    padding:2px 8px; border-radius:4px;
+    letter-spacing:0.08em; margin-bottom:6px;
+  }
+  .algo-explain-box p { font-size:13px; color:var(--gray-600); line-height:1.7; }
+  .algo-explain-box strong { color:var(--orange); }
+
+  /* ── 【新增】预期形成屏幕 ── */
+  
+  .predict-opt-btn {
+    padding:14px 10px;
+    background:var(--white);
+    border:2px solid var(--gray-200);
+    border-radius:var(--radius-sm);
+    font-family:'PingFang SC','Microsoft YaHei',sans-serif;
+    font-size:14px; font-weight:600;
+    color:var(--gray-600);
+    cursor:pointer;
+    transition:all 0.15s;
+    text-align:center;
+    line-height:1.5;
+  }
+  .predict-opt-btn:active, .predict-opt-btn.selected {
+    background:var(--orange-pale);
+    border-color:var(--orange);
+    color:var(--orange);
+  }
+  
+  .predict-slider-labels {
+    display:flex; justify-content:space-between;
+    font-size:12px; color:var(--gray-400); margin-top:4px;
+  }
+  .predict-val-display {
+    font-family:Consolas,Monaco,monospace;
+    font-size:32px; font-weight:700;
+    color:var(--orange); text-align:center;
+    margin:8px 0;
+  }
+
+  /* ── 【新增】游戏内事件日志 ── */
+  .event-log-strip {
+    position:absolute; top:-28px; left:0; right:0;
+    display:flex; gap:6px; justify-content:center;
+    pointer-events:none;
+  }
+  .event-log-chip {
+    font-size:11px; font-weight:700;
+    padding:2px 8px; border-radius:10px;
+    animation:chipPop 0.3s ease;
+    white-space:nowrap;
+  }
+  @keyframes chipPop { from{transform:scale(0.7);opacity:0;} to{transform:scale(1);opacity:1;} }
+  .event-log-chip.boost { background:rgba(52,199,89,0.2); color:#1e9e3e; }
+  .event-log-chip.drift { background:rgba(255,59,48,0.15); color:var(--red); }
+  .event-log-chip.sync  { background:rgba(124,58,237,0.15); color:#7c3aed; }
+  .event-log-chip.carry { background:rgba(255,195,0,0.2); color:#c89000; }
+
+  .tag {
+    display:inline-block;
+    padding:2px 8px;
+    border-radius:4px;
+    font-size:12px; font-weight:700;
+    background:var(--orange-pale);
+    color:var(--orange); letter-spacing:0.04em;
+  }
+
+  .info-box {
+    background:var(--orange-pale);
+    border-left:3px solid var(--orange);
+    border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+    padding:12px 16px;
+    margin-top:16px;
+  }
+  .info-box p { color:var(--gray-600); font-size:14px; }
+
+  /* ── ALGO HIGHLIGHT ── */
+  .algo-note {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: var(--gray-800) !important;
+    line-height: 2 !important;
+    letter-spacing: 0.03em;
+  }
+  .algo-note strong { color: var(--orange); font-size: 17px; }
+  .algo-tag {
+    display: inline-block;
+    background: var(--orange);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .partner-algo-desc {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    color: var(--orange) !important;
+    letter-spacing: 0.04em;
+    margin-top: 2px !important;
+    line-height: 1.7 !important;
+  }
+
+  .overlay {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.45);
+    display:flex; align-items:center; justify-content:center;
+    padding:24px;
+    z-index:200;
+    animation:fadeIn 0.3s ease;
+  }
+  .overlay.hidden { display:none; }
+
+  /* ── COVER SCREEN ── */
+  #screen-cover {
+    background: linear-gradient(170deg, #061825 0%, #0c3058 55%, #1a6080 100%);
+    overflow: hidden;
+    padding: 0;
+  }
+  .cover-waves {
+    position:absolute; bottom:0; left:0; right:0; height:220px;
+    overflow:hidden; pointer-events:none; z-index:0;
+  }
+  .cover-wave {
+    position:absolute; bottom:0; left:-40%;
+    width:180%; border-radius:42% 58% 38% 62% / 28% 28% 72% 72%;
+  }
+  .wave1 { height:110px; background:rgba(255,255,255,0.04); animation:waveAnim 9s ease-in-out infinite; }
+  .wave2 { height:70px; background:rgba(255,255,255,0.065); animation:waveAnim 6.5s ease-in-out infinite reverse; bottom:12px; }
+  @keyframes waveAnim {
+    0%,100%{transform:translateX(0) rotate(0deg);}
+    50%{transform:translateX(4%) rotate(1.5deg);}
+  }
+  .cover-content {
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:1; position:relative;
+    width:100%; height:100%; padding:40px 32px;
+  }
+  .cover-fish-emoji {
+    font-size:92px; animation:fishBob 3.2s ease-in-out infinite;
+    filter:drop-shadow(0 10px 28px rgba(0,0,0,0.5));
+    margin-bottom:20px;
+  }
+  @keyframes fishBob {
+    0%,100%{transform:translateY(0) rotate(-4deg);}
+    50%{transform:translateY(-16px) rotate(4deg);}
+  }
+  .cover-title {
+    font-size:28px; font-weight:800; color:#fff;
+    letter-spacing:0.04em;
+    text-shadow:0 2px 24px rgba(0,0,0,0.6);
+    margin-bottom:8px;
+  }
+  .cover-sub {
+    font-size:18px; color:rgba(255, 255, 255, 0.783);
+    letter-spacing:0.1em; margin-bottom:40px;
+  }
+  .cover-features {
+    display:flex; gap:28px; margin-bottom:44px;
+  }
+  .cover-feature { text-align:center; }
+  .cover-feature .cf-icon { font-size:24px; margin-bottom:6px; }
+  .cover-feature .cf-label { font-size:13px; color:rgba(255, 255, 255, 0.518); font-weight:500; letter-spacing:0.12em; }
+  .cover-btn {
+    padding:18px 60px;
+    background:var(--orange);
+    color:#fff; border:none; border-radius:50px;
+    font-family:'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size:18px; font-weight:700; cursor:pointer;
+    box-shadow:0 8px 32px rgba(255,140,0,0.5), 0 2px 12px rgba(0,0,0,0.3);
+    letter-spacing:0.12em;
+    transition:transform 0.15s, box-shadow 0.15s;
+  }
+  .cover-btn:active { transform:scale(0.96); box-shadow:0 4px 16px rgba(255,140,0,0.3); }
+  .cover-footer {
+    position:absolute; bottom:20px; z-index:1;
+    font-size:10px; color:rgba(255,255,255,0.15);
+    letter-spacing:0.2em; font-weight:500;
+  }
+
+  /* ── START OVERLAY ── */
+  .start-overlay {
+    position:absolute; inset:0;
+    background:rgba(248,248,246,0.5);
+    backdrop-filter:blur(2px);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:50;
+    animation:fadeIn 0.3s ease;
+    padding:32px 24px;
+  }
+  .start-overlay.hidden { display:none; }
+  .start-overlay .so-icon { font-size:56px; margin-bottom:16px; }
+  .start-overlay h2 { font-size:20px; font-weight:700; margin-bottom:8px; text-align:center; }
+  .start-overlay .so-desc { font-size:14px; color:var(--gray-600); text-align:center; line-height:1.7; max-width:280px; margin-bottom:4px; }
+  .start-overlay .so-hint { font-size:12px; color:var(--gray-400); text-align:center; margin-bottom:28px; }
+  .start-overlay .btn { max-width:260px; margin-top:0; }
+  /* 队友对话气泡 */
+.chat-bubble {
+  position: absolute;
+  bottom: 100px; /* 避开底部的操作按钮 */
+  right: 20px;
+  background: white;
+  border: 2px solid var(--orange);
+  border-radius: 18px 18px 2px 18px; /* 聊天气泡形状 */
+  padding: 10px 16px;
+  box-shadow: 0 4px 12px rgba(255, 140, 0, 0.15);
+  display: none; /* 初始隐藏 */
+  z-index: 100;
+  max-width: 180px;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.chat-bubble::after {
+  content: "🤖 队友";
+  position: absolute;
+  top: -22px;
+  right: 5px;
+  font-size: 11px;
+  color: var(--orange);
+  font-weight: bold;
+}
+
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.8) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.chat-text {
+  font-size: 14px;
+  color: var(--gray-800);
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* ── FLOAT BANNER 迷你段位行 ── */
+.float-rank-mini {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FFF9F2, #FFFFFF);
+  border: 1px solid rgba(255,140,0,0.2);
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin: 5px 0;
+}
+.float-rank-label {
+  font-size: 10px;
+  color: var(--gray-400);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-bottom: 2px;
+}
+.float-rank-main {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.float-rank-num {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--orange);
+  line-height: 1;
+}
+.float-rank-unit {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--orange);
+}
+.float-rank-desc-badge {
+  display: inline-block;
+  grid-template-columns: 2em 2em;  /* 每列恰好一个汉字宽 */
+  gap: 2px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--orange);
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-align: center;
+  line-height: 1.3;
+  white-space: nowrap;
+  width: fit-content;
+  box-shadow: 0 2px 6px rgba(255,140,0,0.25);
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="screen active" id="screen-cover">
+    <div class="cover-waves">
+      <div class="cover-wave wave1"></div>
+      <div class="cover-wave wave2"></div>
+    </div>
+    <div class="cover-content">
+      <div class="cover-fish-emoji">🎣</div>
+      <div class="cover-title">协作钓鱼挑战</div>
+      <div class="cover-sub"><strong>智能算法匹配 · 实时搭配协作</strong></div>
+      <div class="cover-features">
+        <div class="cover-feature">
+          <div class="cf-icon">🤝</div>
+          <div class="cf-label">双人协作</div>
+        </div>
+        <div class="cover-feature">
+          <div class="cf-icon">⚡</div>
+          <div class="cf-label">技能挑战</div>
+        </div>
+        <div class="cover-feature">
+          <div class="cf-icon">🏆</div>
+          <div class="cf-label">段位系统</div>
+        </div>
+      </div>
+      <button class="cover-btn" onclick="startFromCover()">开始游戏</button>
+    </div>
+    <div class="cover-footer">COOPERATIVE FISHING CHALLENGE</div>
+  </div>
+
+  <div class="screen" id="screen-intro">
+    <span class="title-emoji">🎣</span>
+    <h1>协作钓鱼挑战</h1>
+    <div class="divider"></div>
+    <div class="card mt-20" style="max-width:380px;">
+      <h2>🎯 任务说明</h2>
+      <p class="mt-8">使指针停留在<strong style="color:var(--green);">绿区</strong>内，两人协作捕鱼</p>
+      <div class="info-box">
+        <p>📱 <strong>长按底部按钮</strong>发力，松开卸力</p>
+      </div>
+      <div class="info-box" style="margin-top:10px;">
+        <div class="algo-tag">🤖 算法匹配系统</div>
+        <p class="algo-note">🤝 <strong>算法系统</strong>将根据您的<strong>综合表现</strong>自动匹配合适的搭档，以提升协作体验</p>
+      </div>
+    </div>
+    <button class="btn" style="max-width:380px;" onclick="startSoloTest()">开始热身练习 →</button>
+  </div>
+
+  <div class="screen" id="screen-solo">
+    <div class="start-overlay" id="solo-start-overlay">
+      <div class="so-icon">🎣</div>
+      <h2>热身练习</h2>
+      <p class="so-desc" style="color: rgba(0, 0, 0, 0.648);">长按底部按钮发力，保持指针停在绿色区域内</p>
+      <p class="so-hint" style="color: rgba(0, 0, 0, 0.648);">练习时长 <strong style="color: rgba(0, 0, 0, 0.648);">10 秒</strong>，<strong style="color: rgba(0, 0, 0, 0.648);">系统</strong>将根据综合表现评估您的操作水平</p>
+      <button class="btn" onclick="beginSoloGame()">我准备好了，开始热身 →</button>
+    </div>
+    <div class="game-header">
+      <div>
+        <div class="timer-display" id="solo-timer">10</div>
+        <div class="timer-label" style="color: rgba(0, 0, 0, 0.648);">热身剩余</div>
+      </div>
+      <div class="score-box">
+        <div class="status-pill" id="solo-status">准备中</div>
+      </div>
+    </div>
+    <div class="gauge-area">
+      <p class="text-center" style="font-size:13px;color:rgba(0, 0, 0, 0.648);">保持指针在绿色区域内</p>
+      <div class="gauge-container">
+        <div class="gauge-label-row">
+          <span>← 松弛</span>
+          <span>绷断 →</span>
+        </div>
+        <div class="gauge-track" id="solo-gauge-track">
+          <div class="gauge-green" id="solo-green"></div>
+          <div class="gauge-needle" id="solo-needle"></div>
+        </div>
+      </div>
+      <div class="capture-section">
+        <div class="capture-label-row">
+          <span class="capture-title">绿区停留</span>
+          <span class="capture-pct" id="solo-pct">0%</span>
+        </div>
+        <div class="capture-track">
+          <div class="capture-fill" id="solo-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="hold-area">
+      <button class="hold-btn" id="solo-hold-btn"
+        ontouchstart="holdStart(event,'solo')" ontouchend="holdEnd('solo')"
+        onmousedown="holdStart(event,'solo')" onmouseup="holdEnd('solo')">
+        <span>长按发力</span>
+        <span class="btn-hint">🎣</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-matching">
+    <span class="title-emoji">🤝</span>
+    <h1>匹配搭档中</h1>
+    <div class="dot-pulse">
+      <span></span><span></span><span></span>
+    </div>
+    <p class="text-center" style="max-width:280px;color:var(--gray-600);">算法正在为您寻找最佳搭档，请稍候…</p>
+    <div class="card mt-20" style="max-width:360px;">
+      <div style="display:flex;gap:12px;align-items:center;">
+        <span style="font-size:28px;">⚡</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;">综合评估中</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:2px;">根据您的操作数据优化匹配</div>
+        </div>
+      </div>
+      <div class="progress-track mt-16">
+        <div class="progress-fill" id="match-progress" style="width:0%"></div>
+      </div>
+      <div style="font-size:11px;color:var(--gray-400);margin-top:6px;text-align:right;" id="match-label">分析数据…</div>
+      <!-- 【新增】动态算法步骤说明 -->
+      <div id="match-algo-steps" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-pre-disclose">
+    <p class="text-center" style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">🎉 匹配成功！</p>
+    <div class="partner-card" style="max-width:400px;">
+      <div class="partner-header">
+        <div class="partner-avatar">🏆</div>
+        <div class="partner-info">
+          <h3>搭档 #<span id="pre-pid"></span></h3>
+          <p class="partner-algo-desc">🤖 算法匹配在线搭档(水平1→5递增)</p>
+        </div>
+      </div>
+      <div class="rank-row">
+        <div style="display:flex; flex-direction:column; flex:1;">
+          <div class="rank-label-top">段位等级</div>
+          <div class="rank-main-content">
+            <span class="rank-icon" id="pre-rank-icon">🥇</span>
+            <span class="rank-text" id="pre-rank-name"></span><span class="rank-unit">级</span>
+          </div>
+        </div>
+        <span class="rank-sub" id="pre-rank-desc"></span>
+      </div>
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-item">
+          <div class="s-val" id="pre-acc"></div>
+          <div class="s-lbl" style="color: rgba(0, 0, 0, 0.648);">捕获进度均值</div>
+        </div>
+        <div class="stat-item">
+          <div class="s-val" id="pre-wr"></div>
+          <div class="s-lbl" style="color: rgba(0, 0, 0, 0.648);">近期胜率</div>
+        </div>
+      </div>
+      <!-- 【新增】算法匹配理由说明 
+       <div class="algo-explain-box" id="pre-algo-explain">
+  <div class="ae-tag">🤖 为什么匹配这位搭档？</div>
+  <p id="pre-algo-reason">正在加载…</p>
+</div>-->
+      <p style="font-size:12px;color:var(--gray-400);text-align:center;margin-top:8px;">数据由系统实时同步</p>
+    </div>
+    <button class="btn" style="max-width:400px;" onclick="startMainGame()">开始对局 🎣</button>
+  </div>
+
+  <div class="screen" id="screen-game">
+    <div class="start-overlay" id="main-start-overlay">
+      <div class="so-icon">🤝</div>
+      <h2>搭档已就绪</h2>
+      <p class="so-desc">正式对局时长 <strong>30 秒</strong><br>双方共享捕获进度，长按发力保持协调<br>💡蓝色张力条反映<strong>搭档实时操作</strong><br>搭档操作可能会在某种程度上影响绿区的移动</p>
+      <p class="so-hint">了解信息后点击开始</p>
+      <button class="btn" onclick="beginMainGame()">开始正式对局 →</button>
+    </div>
+    <div class="float-banner" id="float-banner">
+      <div class="float-inner">
+        <div class="float-avatar">🏆</div>
+        <div class="float-text">
+          <div class="float-header-row">
+            <span class="float-algo-tag">算法匹配</span>
+            <span style="font-size:13px;font-weight:700;color:var(--gray-600);">
+              搭档 #<span id="float-pid"></span>
+            </span>
+          </div>
+    <!-- 迷你段位行，对齐第1/3组的 rank-row 风格 -->
+          <div class="float-rank-mini">
+            <div>
+              <div class="float-rank-label">段位等级</div>
+              <div class="float-rank-main">
+                <span id="float-rank-icon" style="font-size:20px;"></span>
+                <span class="float-rank-num" id="float-rank-name"></span>
+                <span class="float-rank-unit">级</span>
+              </div>
+            </div>
+            <span class="float-rank-desc-badge" id="float-rank-desc"></span>
+          </div>
+          <div class="float-stats">
+            <span>捕获均值 <strong id="float-acc"></strong></span>
+            <span>胜率 <strong id="float-wr"></strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="game-header">
+      <div>
+        <div class="timer-display" id="main-timer">30</div>
+        <div class="timer-label" style="color: rgba(0, 0, 0, 0.648);">剩余时间</div>
+      </div>
+      <div class="score-box">
+        <div class="status-pill" id="main-status">准备</div>
+        <div class="score-label" style="margin-top:4px;" id="partner-label">搭档协作中 🤝</div>
+      </div>
+    </div>
+    <div class="gauge-area">
+      <div class="gauge-container">
+        <div class="gauge-label-row">
+          <span>← 松弛</span>
+          <span>绷断 →</span>
+        </div>
+        <div class="gauge-track" id="main-gauge-track">
+          <div class="gauge-green" id="main-green"></div>
+          <div class="gauge-needle" id="main-needle"></div>
+        </div>
+      </div>
+      <div class="capture-section">
+        <div class="capture-label-row">
+          <span class="capture-title">🐡 捕获进度</span>
+          <span class="capture-pct" id="main-pct">0%</span>
+        </div>
+        <div class="capture-track">
+          <div class="capture-fill" id="main-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="partner-section" id="partner-section" style="position:relative;">
+        <div class="event-toast" id="event-toast">
+          <span class="et-line" id="et-title"></span>
+        </div>
+        <div class="partner-bar-header">
+          <span class="partner-bar-label">🤝 搭档张力</span>
+          <span class="partner-bar-status" id="partner-status-text">稳定</span>
+        </div>
+        <div class="partner-bar-track">
+          <div class="partner-bar-safe-zone" id="partner-safe-zone"></div>
+          <div class="partner-bar-fill" id="partner-gauge"></div>
+          <div class="partner-bar-needle" id="partner-needle"></div>
+        </div>
+        <!-- 【新增】搭档行为反馈文字 -->
+        <div id="partner-behavior-label" style="margin-top:6px;font-size:12px;color:var(--gray-400);text-align:center;font-weight:600;min-height:16px;"></div>
+      </div>
+    </div>
+    <div class="hold-area">
+      <button class="hold-btn" id="main-hold-btn"
+        ontouchstart="holdStart(event,'main')" ontouchend="holdEnd('main')"
+        onmousedown="holdStart(event,'main')" onmouseup="holdEnd('main')">
+        <span id="main-btn-text">长按发力</span>
+        <span class="btn-hint" id="main-btn-icon">🎣</span>
+      </button>
+    </div>
+    <div id="teammate-dialogue" class="chat-bubble">
+      <div class="chat-text">给点力啊队友，马上就成功了！</div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-result">
+    <div class="result-ring" id="result-icon">🎣</div>
+    <h1 id="result-title">捕获成功！</h1>
+    <div class="divider"></div>
+    <div class="card" style="max-width:380px;margin-top:16px;">
+      <h2 style="margin-bottom:4px;">本局数据</h2>
+      <div class="data-table">
+        <div class="data-row">
+          <span class="d-key" >捕获进度</span>
+          <span class="d-val" id="res-capture">—</span>
+        </div>
+        <!--注释一下，等后续数据稳定了再放出来 
+        <div class="data-row">
+          <span class="d-key" >绿区停留时长</span>
+          <span class="d-val" id="res-inzone">—</span>
+        </div>
+        <div class="data-row">
+          <span class="d-key" >操作频率</span>
+          <span class="d-val" id="res-ops">—</span>
+        </div>
+        -->
+        <div class="data-row" style="font-weight: bold;">
+          <span class="d-key" style="color: #e07c00;">个人水平</span>
+          <span class="d-val" id="res-skill">—</span>
+        </div>
+        <div class="data-row">
+          <span class="d-key">实验组别</span>
+          <span class="d-val" id="res-group">—</span>
+        </div>
+      </div>
+      <div class="contrib-section">
+        <div class="contrib-title">🤝 协作贡献分析</div>
+        <div class="contrib-row">
+          <span class="contrib-label">您的贡献</span>
+          <div class="contrib-track"><div class="contrib-fill you" id="res-you-fill" style="width:0%"></div></div>
+          <span class="contrib-pct you" id="res-you-pct">—</span>
+        </div>
+        <div class="contrib-row">
+          <span class="contrib-label">搭档贡献</span>
+          <div class="contrib-track"><div class="contrib-fill partner" id="res-partner-fill" style="width:0%"></div></div>
+          <span class="contrib-pct partner" id="res-partner-pct">—</span>
+        </div>
+      </div>
+      <!-- 【新增】关键事件统计 -->
+      <div class="data-table" style="margin-top:12px;" id="event-stats-table">
+        <!-- 
+        <div class="data-row">
+          <span class="d-key">✨ 搭档带飞次数</span>
+          <span class="d-val" id="res-boost-count">—</span>
+        </div>
+        <div class="data-row">
+          <span class="d-key">⚠ 搭档短暂偏离次数</span>
+          <span class="d-val" id="res-drift-count">—</span>
+        </div>
+        <div class="data-row">
+          <span class="d-key">🤝 协作共振次数</span>
+          <span class="d-val" id="res-sync-count">—</span>
+        </div>
+        <div class="data-row">
+          <span class="d-key">📊 操作稳定性</span>
+          <span class="d-val" id="res-stability">—</span>
+        </div>
+        -->
+      </div>
+    </div>
+    <button class="btn" style="max-width:380px;margin-top:16px;" onclick="showScreen('end')">继续 →</button>
+  </div>
+
+  <div class="screen" id="screen-post-disclose">
+    <p class="text-center" style="font-size:13px;color:var(--gray-400);margin-bottom:8px;">🎉 对局结束！揭晓搭档档案</p>
+    <div class="partner-card" style="max-width:400px;">
+      <div class="partner-header">
+        <div class="partner-avatar">🏆</div>
+        <div class="partner-info">
+          <h3>搭档 #<span id="post-pid"></span></h3>
+          <p class="partner-algo-desc">🤖 算法匹配本局搭档(水平1→5递增)</p>
+        </div>
+      </div>
+      <div class="rank-row" style="margin-bottom:16px;">
+        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+          <div style="font-size:11px;color:var(--gray-400);font-weight:500;letter-spacing:0.06em;">段位等级</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="rank-icon" id="post-rank-icon">🥇</span>
+            <span class="rank-text" id="post-rank-name"></span><span class="rank-text">级</span>
+            <span class="rank-sub" id="post-rank-desc" style="color: rgba(255, 253, 253, 0.936); margin-left:4px;"></span>
+          </div>
+        </div>
+      </div>
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-item">
+          <div class="s-val" id="post-acc"></div>
+          <div class="s-lbl" style="color: rgba(0, 0, 0, 0.648);">捕获进度均值</div>
+        </div>
+        <div class="stat-item">
+          <div class="s-val" id="post-wr"></div>
+          <div class="s-lbl" style="color: rgba(0, 0, 0, 0.648);">近期胜率</div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--gray-400);text-align:center;margin-top:4px;">数据由系统实时同步</p>
+    </div>
+    <button class="btn" style="max-width:400px;" onclick="showResult()">查看本局统计 →</button>
+  </div>
+
+  <div class="screen" id="screen-end">
+    <span class="title-emoji">🐡</span>
+    <h1>感谢您的参与</h1>
+    <div class="divider"></div>
+    <div class="card" style="max-width:380px;margin-top:16px;">
+      <p class="text-center">本次协作已完成。请点击右下方按钮返回问卷并继续回答问题</p>
+      <div class="info-box mt-16">
+        <p>📋 问卷约 <strong>3分钟</strong>完成，您的回答非常重要！</p>
+      </div>
+    </div>
+    <button class="btn" id="submit-btn" style="max-width:380px;" onclick="submitToCredamo()">返回问卷并继续回答问题 →</button>
+  </div>
+
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+const STATE = {
+  group: null,          
+  skillLevel: null,     // 保留兼容，实际使用 soloCaptureMean
+  soloCaptureMean: 0,   // 【新增】连续变量：热身两轮绿区率加权均值
+  partnerSkillLevel: null, // 【新增】'high' | 'low'，URL参数 partnerSkill 控制
+  phase: 'init',
+  soloInZoneFrames: 0,
+  soloTotalFrames: 0,
+  soloRound: 1,          
+  soloRound1Ratio: 0,    
+  mainInZoneMs: 0,
+  mainTotalMs: 0,
+  mainOpsCount: 0,
+  mainCaptureProgress: 0,
+  partner: null,
+  needlePos: 50,      
+  pressing: false,
+  greenPos: 40,       
+  greenWidth: 10,     
+  greenVel: 0,        
+  greenTarget: 40,
+  gameInterval: null,
+  soloInterval: null,
+  isSubmitted: false,   
+  partnerTensionPos: 50,
+  partnerTensionTarget: 50,
+  partnerEventCooldown: 4,   
+  partnerBoostTicks: 0,       
+  partnerDriftTicks: 0,
+  partnerCaptureProgress: 0,  
+  partnerGreenPos: 35,        
+  partnerGreenWidth: 12,      
+  partnerGreenTarget: 35,
+  dialogueShown: false,
+  // 【新增】关键事件计数
+  eventBoostCount: 0,
+  eventDriftCount: 0,
+  eventSyncCount: 0,
+  // 【新增】预期形成
+  predictContribPct: 50,
+  predictCollabLevel: null,
+  // 【新增】操作稳定性（针位历史）
+  needleHistory: [],
+  partnerInZoneCount: 0,  // 搭档在绿区帧数
+  partnerTotalCount: 0,   // 搭档总帧数
+};
+
+const RANKS = [
+  { name: '1', desc: '新手玩家', icon: '🥉' },
+  { name: '2', desc: '进阶玩家', icon: '🥈' },
+  { name: '3', desc: '精英玩家', icon: '🥇' },
+  { name: '4', desc: '专业玩家', icon: '💎' },
+  { name: '5', desc: '大师玩家', icon: '👑' },
+];
+
+function generatePartner() {
+  const id = Math.floor(Math.random() * 90000) + 10000;
+  const isHigh = STATE.partnerSkillLevel === 'high';
+
+  // 【修改】根据队友水平选择段位
+  // high → rank 4或5；low → rank 1或2
+  const rankPool = isHigh ? [RANKS[3], RANKS[4]] : [RANKS[0], RANKS[1]];
+  const rank = rankPool[Math.floor(Math.random() * rankPool.length)];
+
+  // 【修改】捕获进度均值与胜率按水平差异化
+  const acc = isHigh
+    ? (Math.random() * 8  + 78).toFixed(1) + '%'   // 高：78-86%
+    : (Math.random() * 12 + 30).toFixed(1) + '%';  // 低：30-42%
+  const wr  = isHigh
+    ? (Math.random() * 10 + 55).toFixed(1) + '%'   // 高：55-65%
+    : (Math.random() * 10 + 24).toFixed(1) + '%';  // 低：24-34%
+
+  const games = isHigh
+    ? Math.floor(Math.random() * 300 + 500)
+    : Math.floor(Math.random() * 80  + 20);
+  const combo = isHigh
+    ? Math.floor(Math.random() * 15 + 20)
+    : Math.floor(Math.random() * 5  + 1);
+  return { id, rank, wr, acc, games, combo };
+}
+
+function fillPartnerCard(prefix, p) {
+  document.getElementById(prefix+'-pid').textContent       = p.id;
+  document.getElementById(prefix+'-rank-icon').textContent = p.rank.icon;
+  document.getElementById(prefix+'-rank-name').textContent = p.rank.name;
+  document.getElementById(prefix+'-rank-desc').textContent = p.rank.desc;
+  document.getElementById(prefix+'-wr').textContent        = p.wr;
+  document.getElementById(prefix+'-acc').textContent       = p.acc;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+(function init() {
+  const params = new URLSearchParams(window.location.search);
+  const g = parseInt(params.get('group'));
+  if (g >= 1 && g <= 3) {
+    STATE.group = g;
+  } else {
+    STATE.group = 1
+  }
+  // 【新增】读取队友水平参数：?partnerSkill=high 或 ?partnerSkill=low
+  const ps = params.get('partnerSkill');
+  STATE.partnerSkillLevel = (ps === 'high' || ps === 'low') ? ps : 'low';
+
+  STATE.partner = generatePartner();
+  showScreen('cover');
+})();
+
+function startFromCover() {
+  showScreen('intro');
+}
+
+function holdStart(e, ctx) {
+  e.preventDefault();
+  STATE.pressing = true;
+  const btn = document.getElementById(ctx + '-hold-btn');
+  btn.classList.add('pressed');
+  if (ctx === 'main') {
+    STATE.mainOpsCount++;
+    document.getElementById('main-btn-text').textContent = '发力中！';
+    document.getElementById('main-btn-icon').textContent = '💪';
+  }
+}
+
+function holdEnd(ctx) {
+  STATE.pressing = false;
+  const btn = document.getElementById(ctx + '-hold-btn');
+  if (btn) btn.classList.remove('pressed');
+  if (ctx === 'main') {
+    document.getElementById('main-btn-text').textContent = '长按发力';
+    document.getElementById('main-btn-icon').textContent = '🎣';
+  }
+}
+
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+function computeNeedle(isHighSkill) {
+  const PULL_STRENGTH  = isHighSkill ? 1.8 : 1.4;//拉力强度
+  const DRIFT_STRENGTH = isHighSkill ? 0.9 : 0.7;//漂移强度
+  const NOISE          = isHighSkill ? 1.5 : 1.0;//随机扰动
+
+  if (STATE.pressing) {
+    STATE.needlePos += PULL_STRENGTH + (Math.random() - 0.3) * NOISE;
+  } else {
+    STATE.needlePos -= DRIFT_STRENGTH + (Math.random() - 0.5) * NOISE * 0.5;
+  }
+  STATE.needlePos = Math.max(2, Math.min(98, STATE.needlePos));
+}
+
+function computeGreenZone(isHighSkill) {
+  if (Math.random() < 0.06) {
+    STATE.greenTarget = Math.random() * 50 + 15;
+  }
+  const SPEED = 0.66;
+  STATE.greenVel = (STATE.greenTarget - STATE.greenPos) * SPEED;
+  STATE.greenPos += STATE.greenVel * 0.13;
+  STATE.greenPos = Math.max(5, Math.min(95 - STATE.greenWidth, STATE.greenPos));
+}
+
+function isInZone() {
+  const left  = STATE.greenPos;
+  const right = STATE.greenPos + STATE.greenWidth;
+  return STATE.needlePos >= left && STATE.needlePos <= right;
+}
+
+function applyAIEffect(isHighSkill) {
+  if (Math.random() < 0.025) {
+    const perturbation = (Math.random() - 0.5) * 3;
+    STATE.needlePos += perturbation;
+  }
+  const center = STATE.greenPos + STATE.greenWidth / 2;
+  const deviation = Math.abs(STATE.needlePos - center);
+  if (deviation > STATE.greenWidth * 0.6) {
+    STATE.needlePos += (center - STATE.needlePos) * 0.01;
+  }
+}
+
+function startSoloTest() {
+  STATE.soloInZoneFrames = 0;
+  STATE.soloTotalFrames  = 0;
+  STATE.soloRound        = 1;
+  STATE.soloRound1Ratio  = 0;
+  STATE.needlePos  = 50;
+  STATE.greenPos   = 35;
+  STATE.greenWidth = 10;
+  STATE.greenTarget = 35;
+  STATE.pressing   = false;
+  showScreen('solo');
+}
+
+function beginSoloGame() {
+  document.getElementById('solo-start-overlay').classList.add('hidden');
+  let timeLeft = 10;
+  document.getElementById('solo-timer').textContent = timeLeft;
+  const updateUI = () => {
+    document.getElementById('solo-needle').style.left = STATE.needlePos + '%';
+    document.getElementById('solo-green').style.left  = STATE.greenPos  + '%';
+    document.getElementById('solo-green').style.width = STATE.greenWidth + '%';
+    const pct = STATE.soloTotalFrames > 0
+      ? Math.round(STATE.soloInZoneFrames / STATE.soloTotalFrames * 100) : 0;
+    document.getElementById('solo-pct').textContent  = pct + '%';
+    document.getElementById('solo-fill').style.width = pct + '%';
+    const inZ = isInZone();
+    const sp = document.getElementById('solo-status');
+    sp.textContent = inZ ? '✓ 在绿区' : '✗ 偏离';
+    sp.className = 'status-pill ' + (inZ ? 'in-zone' : 'out-zone');
+  };
+  STATE.soloInterval = setInterval(() => {
+    computeNeedle(false);
+    computeGreenZone(false);
+    STATE.soloTotalFrames++;
+    if (isInZone()) STATE.soloInZoneFrames++;
+    updateUI();
+  }, 50);
+
+  const countdown = setInterval(() => {
+    timeLeft--;
+    document.getElementById('solo-timer').textContent = timeLeft;
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      clearInterval(STATE.soloInterval);
+      holdEnd('solo');
+      endSoloTest();
+    }
+  }, 1000);
+}
+
+function endSoloTest() {
+  const ratio = STATE.soloInZoneFrames / STATE.soloTotalFrames;
+
+  if (STATE.soloRound === 1) {
+    STATE.soloRound1Ratio = ratio;
+    STATE.soloRound = 2;
+    STATE.soloInZoneFrames = 0;
+    STATE.soloTotalFrames  = 0;
+    STATE.needlePos  = 50;
+    STATE.greenPos   = 35;
+    STATE.greenWidth = 10;
+    STATE.greenTarget = 35;
+    STATE.pressing   = false;
+    const overlay = document.getElementById('solo-start-overlay');
+    overlay.querySelector('h2').textContent = '第2次热身';
+    overlay.querySelector('.so-desc').textContent = '第1次完成！再练习一次，系统结合两次表现评估您的水平';
+    overlay.querySelector('.so-hint').innerHTML = '第 <strong>2</strong> 次 / 共 2 次';
+    overlay.classList.remove('hidden');
+  } else {
+    // 【修改】使用连续变量 soloCaptureMean，不再简单分高/低
+    const avgRatio = 0.4 * STATE.soloRound1Ratio + 0.6 * ratio;
+    STATE.soloCaptureMean = parseFloat((avgRatio * 100).toFixed(1)); // 保留一位小数，单位%
+    // skillLevel 仍保留作兼容（用于 computeNeedle 等函数），但不在UI中展示给用户
+    STATE.skillLevel = avgRatio >= 0.55 ? 'high' : 'low';
+    showMatchingScreen();
+  }
+}
+
+const MATCH_MSGS = ['分析操作数据…', '计算搭档兼容度…', '优化协作系数…', '匹配完成 ✓'];
+
+// 【新增】按队友水平生成算法匹配理由
+function getAlgoReason(partner) {
+  const isHigh = STATE.partnerSkillLevel === 'high';
+  const mean   = STATE.soloCaptureMean;
+  if (isHigh) {
+    return `您的捕获进度均值为 <strong>${mean}%</strong>，系统检测到您需要一位稳定输出的高段位搭档来<strong>提升整体协作效率</strong>。该搭档近期捕获均值 ${partner.acc}，胜率 ${partner.wr}，与您的节奏高度匹配。`;
+  } else {
+    return `您的捕获进度均值为 <strong>${mean}%</strong>，系统当前高水平搭档资源紧张，为保证匹配速度，已<strong>优先分配当前可用搭档</strong>。该搭档近期捕获均值 ${partner.acc}，胜率 ${partner.wr}。`;
+  }
+}
+
+// 【新增】匹配屏算法步骤动画
+function showMatchingScreen() {
+  showScreen('matching');
+  const bar  = document.getElementById('match-progress');
+  const lbl  = document.getElementById('match-label');
+  const stepsContainer = document.getElementById('match-algo-steps');
+  stepsContainer.innerHTML = '';
+
+  const isHigh = STATE.partnerSkillLevel === 'high';
+  const algoStepTexts = isHigh
+    ? ['✅ 绿区停留率计算完成', '✅ 操作稳定性评估完毕', '✅ 高兼容搭档定位中…', '✅ 最优搭档匹配成功']
+    : ['✅ 绿区停留率计算完成', '✅ 操作节律分析完毕',   '⏳ 正在从候补池搜索…',  '✅ 最近可用搭档确认'];
+
+  let step = 0;
+  const steps = [0, 33, 66, 100];
+  const go = () => {
+    if (step >= MATCH_MSGS.length) {
+      clearInterval(matchInt);
+      setTimeout(afterMatching, 400);
+      return;
+    }
+    bar.style.width = steps[step] + '%';
+    lbl.textContent = MATCH_MSGS[step];
+    // 追加算法步骤文字
+    const chip = document.createElement('div');
+    chip.style.cssText = 'font-size:12px;color:var(--gray-600);padding:4px 0;border-bottom:1px solid var(--gray-200);';
+    chip.textContent = algoStepTexts[step];
+    stepsContainer.appendChild(chip);
+    step++;
+  };
+  go();
+  const matchInt = setInterval(go, 750);
+}
+
+function afterMatching() {
+  const reasonEl = document.getElementById('pre-algo-reason');
+  if (reasonEl) reasonEl.innerHTML = getAlgoReason(STATE.partner);
+
+  if (STATE.group === 1) {
+    fillPartnerCard('pre', STATE.partner);
+    showScreen('pre-disclose');
+  } else {
+    startMainGame();   // ← 改为直接开始游戏
+  }
+}
+
+// ── 【新增】预期形成：选项选择 ──
+let _predictCollabVal = null;
+
+function startMainGame() {
+  STATE.mainInZoneMs  = 0;
+  STATE.mainTotalMs   = 0;
+  STATE.mainOpsCount  = 0;
+  STATE.mainCaptureProgress = 0;
+  STATE.partnerCaptureProgress = 0;
+  STATE.partnerTensionPos    = 50;
+  STATE.partnerTensionTarget = 50;
+  STATE.partnerEventCooldown = 4;
+  STATE.partnerBoostTicks    = 0;
+  STATE.partnerDriftTicks    = 0;
+  STATE.partnerGreenPos      = 35;
+  STATE.partnerGreenWidth    = 12;
+  STATE.partnerGreenTarget   = 35;
+  STATE.needlePos  = 50;
+  STATE.greenWidth = 10;
+  STATE.greenPos   = 50 - STATE.greenWidth / 2;
+  STATE.greenTarget = STATE.greenPos;
+  STATE.pressing   = false;
+  // 【新增】重置事件计数与稳定性记录
+  STATE.eventBoostCount  = 0;
+  STATE.eventDriftCount  = 0;
+  STATE.eventSyncCount   = 0;
+  STATE.needleHistory    = [];
+  STATE.partnerInZoneCount = 0;
+  STATE.partnerTotalCount  = 0;
+
+  STATE.dialogueShown = false; 
+  const bubble = document.getElementById('teammate-dialogue');
+  if (bubble) {
+    bubble.style.display = 'none';
+    bubble.style.opacity = '1';
+  }
+
+  showScreen('game');
+
+  if (STATE.group === 2) {
+    document.getElementById('float-pid').textContent       = STATE.partner.id;
+    document.getElementById('float-rank-icon').textContent = STATE.partner.rank.icon;
+    document.getElementById('float-rank-name').textContent = STATE.partner.rank.name;
+    document.getElementById('float-rank-desc').textContent = STATE.partner.rank.desc;
+    document.getElementById('float-wr').textContent        = STATE.partner.wr;
+    document.getElementById('float-acc').textContent       = STATE.partner.acc;
+  }
+
+  document.getElementById('main-timer').textContent = 30;
+}
+
+// 【修改】高水平搭档事件池：多带飞、多同步
+const PARTNER_EVENTS_HIGH = [
+  { type:'boost', icon:'✨', title:'搭档完美配合！',  sub:'捕获速度短暂加倍！',    cls:'boost' },
+  { type:'boost', icon:'🚀', title:'搭档强势带飞！',  sub:'贡献爆发，进度猛增！',  cls:'boost' },
+  { type:'sync',  icon:'🤝', title:'协作共振！',      sub:'进度爆发 +5%！',        cls:'sync'  },
+  { type:'sync',  icon:'💫', title:'默契协作！',      sub:'双方节奏完美对齐',      cls:'sync'  },
+  { type:'drift', icon:'⚠',  title:'搭档短暂偏离',    sub:'稳住，马上回正',        cls:'drift' },
+];
+
+// 【修改】低水平搭档事件池：多拖后腿、失误频繁
+const PARTNER_EVENTS_LOW = [
+  { type:'drift', icon:'⚠',  title:'搭档偏离！',      sub:'稳住阵型，补偿拉力',    cls:'drift' },
+  { type:'drift', icon:'💢', title:'搭档严重拖后腿！', sub:'独自撑住，坚持到底！', cls:'drift' },
+  { type:'drift', icon:'😱', title:'搭档完全失控！',  sub:'单人模式，全靠你了！',  cls:'drift' },
+  { type:'sync',  icon:'🤝', title:'偶然协作！',      sub:'难得对上，+2% 进度',    cls:'sync'  },
+  { type:'boost', icon:'✨', title:'搭档意外配合！',  sub:'捕获略有加速',          cls:'boost' },
+];
+
+// 行为反馈文字（游戏内持续展示）
+const BEHAVIOR_LABELS_HIGH = ['协作良好 🎯', '节奏稳定 ✅', '完美同步 💫', '搭档给力 🚀'];
+const BEHAVIOR_LABELS_LOW  = ['偏离严重 ⚠', '搭档失控 💢', '拖累整体 😰', '节奏混乱 🌀', '勉强跟上 😤'];
+
+let _eventToastTimer = null;
+function showEventToast(evt) {
+  const el = document.getElementById('event-toast');
+  document.getElementById('et-title').textContent = evt.icon + ' ' + evt.title;
+  el.className = 'event-toast ' + evt.cls + ' show';
+  if (_eventToastTimer) clearTimeout(_eventToastTimer);
+  _eventToastTimer = setTimeout(() => { el.classList.remove('show'); }, 1800);
+}
+
+function beginMainGame() {
+  document.getElementById('main-start-overlay').classList.add('hidden');
+  const isHighUser    = STATE.skillLevel === 'high';
+  const isHighPartner = STATE.partnerSkillLevel === 'high'; // 【新增】队友水平控制
+  let timeLeft = 30;
+  document.getElementById('main-timer').textContent = timeLeft;
+
+  const TICK = 50;
+
+  // ── 【修改】队友行为参数：高/低水平差异明显 ──
+  // 高水平：指针精准追绿、稳定性高、贡献率高、偏离短暂
+  // 低水平：指针漂移大、稳定性低、贡献率低、频繁偏离
+  const partnerParams = isHighPartner
+    ? { chaseStrength: 0.20, noiseMag: 1.8, stableProb: 0.70, baseContrib: 0.25, driftTickMax: 15, eventPool: PARTNER_EVENTS_HIGH, eventProbability: 0.45 }
+    : { chaseStrength: 0.08, noiseMag: 4.0, stableProb: 0.40, baseContrib: 0.20, driftTickMax: 30, eventPool: PARTNER_EVENTS_LOW,  eventProbability: 0.65 };
+
+  // 行为反馈更新计数器
+  let behaviorLabelTick = 0;
+
+  STATE.gameInterval = setInterval(() => {
+    const greenCenter = STATE.partnerGreenPos + STATE.partnerGreenWidth / 2;
+
+    // ── 【修改】AI 张力计算：高水平稳，低水平乱 ──
+    if (STATE.partnerDriftTicks > 0) {
+      STATE.partnerDriftTicks--;
+      // 低水平在失控期间持续大幅漂移
+      if (!isHighPartner) {
+        STATE.partnerTensionTarget += (Math.random() - 0.5) * 20;
+      }
+    } else {
+      if (isHighPartner) {
+        // 高水平：80% 概率精准追绿心，20% 轻微游荡
+        if (Math.random() < 0.80) {
+          STATE.partnerTensionTarget = greenCenter + (Math.random() - 0.5) * 5;
+        } else {
+          STATE.partnerTensionTarget = greenCenter + (Math.random() - 0.5) * 15;
+        }
+      } else {
+        // 低水平：40% 才追绿，60% 大幅随机游走
+        if (Math.random() < 0.40) {
+          STATE.partnerTensionTarget = greenCenter + (Math.random() - 0.5) * 18;
+        } else {
+          STATE.partnerTensionTarget = STATE.partnerTensionPos + (Math.random() - 0.5) * 35;
+        }
+      }
+    }
+
+    const pVel = (STATE.partnerTensionTarget - STATE.partnerTensionPos) * partnerParams.chaseStrength;
+    STATE.partnerTensionPos += pVel + (Math.random() - 0.5) * partnerParams.noiseMag;
+    STATE.partnerTensionPos = Math.max(3, Math.min(97, STATE.partnerTensionPos));
+
+    const partnerInZone = STATE.partnerTensionPos >= STATE.partnerGreenPos
+                       && STATE.partnerTensionPos <= STATE.partnerGreenPos + STATE.partnerGreenWidth;
+
+    // 绿区位置移动（低水平绿区移动更快、更难追）
+    if (Math.random() < (isHighPartner ? 0.05 : 0.10)) {
+      STATE.partnerGreenTarget = Math.random() * 50 + 15;
+    }
+    STATE.partnerGreenPos += (STATE.partnerGreenTarget - STATE.partnerGreenPos) * 0.07;
+    STATE.partnerGreenPos = Math.max(5, Math.min(95 - STATE.partnerGreenWidth, STATE.partnerGreenPos));
+
+    // 搭档对用户绿区的影响
+    if (partnerInZone) {
+      STATE.greenTarget += (50 - STATE.greenTarget) * (isHighPartner ? 0.025 : 0.008);
+    } else {
+      const push = (STATE.partnerTensionPos > STATE.partnerGreenPos + STATE.partnerGreenWidth ? 1.8 : -1.8);
+      STATE.greenTarget = Math.max(8, Math.min(80, STATE.greenTarget + push * (isHighPartner ? 0.6 : 1.4)));
+    }
+
+    computeNeedle(isHighUser);
+    computeGreenZone(isHighUser);
+    applyAIEffect(isHighUser);
+
+    // 【新增】记录针位历史（用于稳定性计算）
+    STATE.needleHistory.push(STATE.needlePos);
+    if (STATE.needleHistory.length > 100) STATE.needleHistory.shift();
+
+    STATE.mainTotalMs += TICK;
+    const inZ = isInZone();
+
+    const captureRate = (STATE.partnerBoostTicks > 0) ? 0.6 : 0.35;//捕获进度速率
+    if (inZ) {
+      STATE.mainInZoneMs += TICK;
+      STATE.mainCaptureProgress = Math.min(100, STATE.mainCaptureProgress + captureRate);
+    }
+    if (STATE.partnerBoostTicks > 0) STATE.partnerBoostTicks--;
+
+    // 搭档贡献（高水平贡献大、稳定；低水平贡献小、不稳定）
+    STATE.partnerTotalCount++;
+    if (partnerInZone) {
+      STATE.partnerInZoneCount++;
+      if (Math.random() < partnerParams.stableProb) {
+        STATE.partnerCaptureProgress += partnerParams.baseContrib * (0.9 + Math.random() * 0.25);
+      }
+    }
+
+    // ── DOM 更新 ──
+    document.getElementById('main-needle').style.left = STATE.needlePos + '%';
+    document.getElementById('main-green').style.left  = STATE.greenPos  + '%';
+    document.getElementById('main-green').style.width = STATE.greenWidth + '%';
+    document.getElementById('main-pct').textContent   = Math.round(STATE.mainCaptureProgress) + '%';
+    document.getElementById('main-fill').style.width  = STATE.mainCaptureProgress + '%';
+
+    const sp = document.getElementById('main-status');
+    sp.textContent = inZ ? '✓ 协作中' : '⚠ 调整中';
+    sp.className = 'status-pill ' + (inZ ? 'in-zone' : 'out-zone');
+
+    const pct = STATE.partnerTensionPos;
+    document.getElementById('partner-gauge').style.width  = pct + '%';
+    document.getElementById('partner-needle').style.left  = pct + '%';
+    document.getElementById('partner-safe-zone').style.left  = STATE.partnerGreenPos + '%';
+    document.getElementById('partner-safe-zone').style.width = STATE.partnerGreenWidth + '%';
+
+    const stEl = document.getElementById('partner-status-text');
+    if (partnerInZone) {
+      stEl.textContent = isHighPartner ? '协作中 ✅' : '偶然协作';
+      stEl.className   = 'partner-bar-status';
+    } else {
+      stEl.textContent = isHighPartner ? '短暂偏离' : '偏离中 ⚠';
+      stEl.className   = 'partner-bar-status drift';
+    }
+
+    // 【新增】行为反馈标签（每 20 ticks 更新一次）
+    behaviorLabelTick++;
+    if (behaviorLabelTick % 20 === 0) {
+      const labelEl = document.getElementById('partner-behavior-label');
+      if (labelEl) {
+        const labels = isHighPartner ? BEHAVIOR_LABELS_HIGH : BEHAVIOR_LABELS_LOW;
+        // 高水平主要显示正向，低水平主要显示负向（偶尔切换增加真实感）
+        const pool = partnerInZone
+          ? (isHighPartner ? BEHAVIOR_LABELS_HIGH : BEHAVIOR_LABELS_LOW)
+          : (isHighPartner ? ['短暂调整中 🔄'] : BEHAVIOR_LABELS_LOW);
+        labelEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+        labelEl.style.color = partnerInZone
+          ? (isHighPartner ? '#1e9e3e' : 'var(--gray-400)')
+          : 'var(--red)';
+      }
+    }
+
+    debugUpdate();
+  }, TICK);
+
+  const countdown = setInterval(() => {
+    timeLeft--;
+    document.getElementById('main-timer').textContent = timeLeft;
+
+    if (timeLeft === 15 && STATE.group === 2) {
+      document.getElementById('float-banner').classList.add('show');
+    }
+
+    STATE.partnerEventCooldown--;
+    if (STATE.partnerEventCooldown <= 0 && timeLeft > 2) {
+      if (Math.random() < partnerParams.eventProbability) {
+        const evtPool = partnerParams.eventPool;
+        const evt = evtPool[Math.floor(Math.random() * evtPool.length)];
+        showEventToast(evt);
+
+        // 【修改】事件物理反馈 + 计数
+        if (evt.type === 'boost') {
+          STATE.partnerBoostTicks = isHighPartner ? 50 : 20;
+          STATE.eventBoostCount++;
+        } else if (evt.type === 'sync') {
+          STATE.mainCaptureProgress = Math.min(100, STATE.mainCaptureProgress + (isHighPartner ? 6 : 2));
+          STATE.partnerCaptureProgress += isHighPartner ? 4 : 1;
+          STATE.eventSyncCount++;
+        } else if (evt.type === 'drift') {
+          STATE.partnerDriftTicks = isHighPartner ? 15 : partnerParams.driftTickMax;
+          STATE.partnerTensionTarget = Math.random() < 0.5 ? 8 : 92;
+          STATE.eventDriftCount++;
+        }
+      }
+      // 【修改】低水平搭档事件更频繁
+      STATE.partnerEventCooldown = isHighPartner
+        ? (4 + Math.floor(Math.random() * 3))
+        : (2 + Math.floor(Math.random() * 2));
+    }
+
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      clearInterval(STATE.gameInterval);
+      holdEnd('main');
+      endMainGame();
+    }
+  }, 1000);
+}
+
+function endMainGame() {
+  document.getElementById('float-banner').classList.remove('show');
+  if (STATE.group === 3) {
+    fillPartnerCard('post', STATE.partner);
+    showScreen('post-disclose');
+  } else {
+    showResult();
+  }
+}
+
+function showResult() {
+  const inZoneSec = (STATE.mainInZoneMs / 1000).toFixed(1);
+  const opsPerSec = (STATE.mainOpsCount / 20).toFixed(2);
+  const capPct    = Math.round(STATE.mainCaptureProgress);
+
+  document.getElementById('res-capture').textContent = capPct + '%';
+  //依旧注释
+  //document.getElementById('res-inzone').textContent  = inZoneSec + ' 秒';
+  //document.getElementById('res-ops').textContent     = opsPerSec + ' 次/秒';
+  // 【修改】不显示"高/低水平"，改为显示连续变量
+  document.getElementById('res-skill').textContent   = STATE.soloCaptureMean + '%（捕获均值）';
+  document.getElementById('res-group').textContent   = STATE.group
+    ? '第 ' + STATE.group + ' 组（' + ['事前','事中','事后'][STATE.group-1] + '披露）'
+    : '未指定组别';
+
+  // 贡献比例
+  const myRaw      = STATE.mainCaptureProgress;
+  const partnerRaw = Math.max(5, STATE.partnerCaptureProgress);
+  const total      = myRaw + partnerRaw;
+  const myPct      = Math.round(myRaw / total * 100);
+  const partnerPct = 100 - myPct;
+  document.getElementById('res-you-pct').textContent     = myPct + '%';
+  document.getElementById('res-partner-pct').textContent = partnerPct + '%';
+  setTimeout(() => {
+    document.getElementById('res-you-fill').style.width     = myPct + '%';
+    document.getElementById('res-partner-fill').style.width = partnerPct + '%';
+  }, 120);
+
+  // 【新增】事件统计
+  //document.getElementById('res-boost-count').textContent = STATE.eventBoostCount + ' 次';
+  //document.getElementById('res-drift-count').textContent = STATE.eventDriftCount + ' 次';
+  //document.getElementById('res-sync-count').textContent  = STATE.eventSyncCount  + ' 次';
+
+  // 【新增】操作稳定性（针位标准差）
+  let stability = '—';
+  if (STATE.needleHistory.length > 5) {
+    const mean = STATE.needleHistory.reduce((a,b) => a+b, 0) / STATE.needleHistory.length;
+    const sd   = Math.sqrt(STATE.needleHistory.reduce((a,b) => a + (b-mean)**2, 0) / STATE.needleHistory.length);
+    // SD 越小 → 稳定性越高
+    if      (sd < 8)  stability = '极稳定 ⭐⭐⭐';
+    else if (sd < 14) stability = '较稳定 ⭐⭐';
+    else if (sd < 20) stability = '一般 ⭐';
+    else              stability = '波动较大';
+  }
+  //document.getElementById('res-stability').textContent = stability;
+
+  // 结果图标与标题
+  const icon  = document.getElementById('result-icon');
+  const title = document.getElementById('result-title');
+  if (capPct >= 100) {
+    icon.textContent = '🏆'; title.textContent = '捕获成功！';
+  } else if (capPct >= 70) {
+    icon.textContent = '🐡'; title.textContent = '可惜，差一点！';
+  } else {
+    icon.textContent = '🎣'; title.textContent = '下次继续努力！';
+  }
+  showScreen('result');
+}
+
+function submitToCredamo() {
+  if (STATE.isSubmitted) return;
+  
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = '提交中...';
+  btn.disabled = true;
+  STATE.isSubmitted = true;
+
+  const inZoneSec = (STATE.mainInZoneMs / 1000).toFixed(2);
+  const soloRatio = STATE.soloTotalFrames > 0 
+    ? (STATE.soloInZoneFrames / STATE.soloTotalFrames * 100).toFixed(1) : 0;
+  const mainRatio = STATE.mainTotalMs > 0 
+    ? (STATE.mainInZoneMs / STATE.mainTotalMs * 100).toFixed(1) : 0;
+  const opsFreq = (STATE.mainOpsCount / 20).toFixed(2);
+  const capProgress = Math.round(STATE.mainCaptureProgress);
+  const partnerId   = STATE.partner ? STATE.partner.id   : 'N/A';
+  const partnerRank = STATE.partner ? STATE.partner.rank.name : 'N/A';
+
+  // 【新增】操作稳定性 SD
+  let needleSD = 0;
+  if (STATE.needleHistory.length > 5) {
+    const mean = STATE.needleHistory.reduce((a,b)=>a+b,0) / STATE.needleHistory.length;
+    needleSD = Math.sqrt(STATE.needleHistory.reduce((a,b)=>a+(b-mean)**2,0)/STATE.needleHistory.length);
+  }
+
+  // 【新增】搭档在绿区率
+  const partnerZoneRatio = STATE.partnerTotalCount > 0
+    ? (STATE.partnerInZoneCount / STATE.partnerTotalCount * 100).toFixed(1) : 0;
+
+  // 【修改】CSV 增加新字段
+  let csvString = [
+    'experiment_group','partner_skill_level','solo_capture_mean',
+    'main_green_sec','main_green_ratio','total_ops_count','ops_freq_per_sec',
+    'capture_progress','partner_id','partner_rank',
+    'event_boost_count','event_drift_count','event_sync_count',
+    'needle_sd','partner_zone_ratio',
+    'predict_contrib_pct','predict_collab_level'
+  ].join(',') + '\n';
+
+  csvString += [
+    STATE.group || 1,
+    STATE.partnerSkillLevel || 'high',
+    STATE.soloCaptureMean || 0,
+    inZoneSec, mainRatio,
+    STATE.mainOpsCount, opsFreq,
+    capProgress, partnerId, partnerRank,
+    STATE.eventBoostCount, STATE.eventDriftCount, STATE.eventSyncCount,
+    needleSD.toFixed(2), partnerZoneRatio,
+    STATE.predictContribPct || 50,
+    STATE.predictCollabLevel || 'average'
+  ].join(',');
+
+  if (typeof onCredamoEndTrialFinish === 'function') {
+    onCredamoEndTrialFinish(csvString);
+  } else {
+    console.warn('Credamo 环境未就绪，模拟提交数据：', csvString);
+  }
+}
+
+/*-function debugUpdate() {
+  if (STATE.mainCaptureProgress >= 70 && !STATE.dialogueShown) {
+    const bubble = document.getElementById('teammate-dialogue');
+    if (bubble) {
+      bubble.style.display = 'block';
+      bubble.style.opacity = '1';
+      STATE.dialogueShown = true;
+      setTimeout(() => {
+        bubble.style.opacity = '0';
+        bubble.style.transition = 'opacity 0.5s';
+        setTimeout(() => { bubble.style.display = 'none'; bubble.style.opacity = '1'; }, 500);
+      }, 3000);
+    }
+  }
+  const bar = document.getElementById('debug-bar');
+  if (!bar) return;
+  bar.style.display = 'block';
+  const inZone = isInZone();
+  const ratio  = STATE.mainTotalMs > 0 ? (STATE.mainInZoneMs/STATE.mainTotalMs*100).toFixed(0) : 0;
+  bar.textContent =
+    `G${STATE.group} | 队友:${STATE.partnerSkillLevel?.toUpperCase()||'?'} | 捕获均值:${STATE.soloCaptureMean}% | ` +
+    `带飞=${STATE.eventBoostCount} 拖后腿=${STATE.eventDriftCount} 协同=${STATE.eventSyncCount}`;
+}-*/
+</script>
+</body>
+</html>
